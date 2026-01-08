@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wantlist</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 30px 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        h2 {
+            font-size: 2.5em;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .back-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 15px;
+            font-weight: 600;
+        }
+
+        .stat-item span {
+            font-size: 1.2em;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        #searchInput {
+            flex: 1;
+            min-width: 300px;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 30px;
+            outline: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        #searchInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        #clearBtn {
+            padding: 15px 30px;
+            font-size: 16px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s ease, transform 0.2s ease;
+            color: #555;
+        }
+
+        #clearBtn:hover {
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        #searchStatus {
+            font-style: italic;
+            color: #666;
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th {
+            padding: 18px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+        }
+
+        th:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background-color: #f5f0ff;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        td {
+            padding: 16px 15px;
+            color: #333;
+            font-size: 13px;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        tbody tr:nth-child(even):hover {
+            background-color: #f0ebff;
+        }
+
+        .thumb-img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .price {
+            font-weight: 600;
+            color: #28a745;
+        }
+
+        .no-price {
+            color: #999;
+            font-style: italic;
+        }
+
+        .available-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .available-yes {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .available-no {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .buy-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+
+        .buy-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .pagination button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .pagination button:not(.active) {
+            background: #f5f5f5;
+            color: #555;
+        }
+
+        .pagination button:hover:not(.active) {
+            background: #e0e0e0;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h2 {
+                font-size: 1.8em;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            #searchInput {
+                min-width: 100%;
+            }
+
+            th, td {
+                padding: 12px 8px;
+                font-size: 12px;
+            }
+
+            .stats-bar {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>   
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2><span class="icon">💿</span> Wantlist</h2>
+            <a href="../index.html" class="back-btn">← Back to Home</a>
+        </div>
+
+        <div class="stats-bar" id="statsBar">
+            <div class="stat-item">Loading stats...</div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="🔍 Search wantlist..." />
+            <button id="clearBtn">Clear Search</button>
+            <span id="searchStatus">Loading...</span>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="wantlistTable">
+                <thead>
+                    <tr>
+                        <th>Cover</th>
+                        <th>Artist</th>
+                        <th>Title</th>
+                        <th>Label</th>
+                        <th>Format</th>
+                        <th>Year</th>
+                        <th>Price</th>
+                        <th>Available</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="data-output"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const API_BASE = '/api';
+    const ITEMS_PER_PAGE = 100;
+    
+    let currentOffset = 0;
+    let totalItems = 0;
+    let searchTimeout;
+    let currentData = [];
+    let allData = [];
+    
+    const searchInput = document.getElementById("searchInput");
+    const clearBtn = document.getElementById("clearBtn");
+    const searchStatus = document.getElementById("searchStatus");
+    const tbody = document.getElementById("data-output");
+    const pagination = document.getElementById("pagination");
+    const statsBar = document.getElementById("statsBar");
+    
+    // Load initial data
+    loadWantlist();
+    
+    // Event listeners
+    searchInput.addEventListener('keyup', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function() {
+            if (searchInput.value.trim().length > 0) {
+                searchWantlist(searchInput.value.trim());
+            } else {
+                currentOffset = 0;
+                renderTable(allData.slice(0, ITEMS_PER_PAGE));
+                renderPagination();
+                searchStatus.textContent = `Showing 1-${Math.min(ITEMS_PER_PAGE, allData.length)} of ${allData.length} records`;
+            }
+        }, 300);
+    });
+    
+    clearBtn.addEventListener('click', function() {
+        searchInput.value = "";
+        currentOffset = 0;
+        renderTable(allData.slice(0, ITEMS_PER_PAGE));
+        renderPagination();
+        searchStatus.textContent = `Showing 1-${Math.min(ITEMS_PER_PAGE, allData.length)} of ${allData.length} records`;
+    });
+    
+    function loadWantlist() {
+        searchStatus.textContent = "Loading...";
+        
+        // Load all wantlist items (607 items is manageable)
+        fetch(`${API_BASE}/discogs/wantlist?limit=500&offset=0`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    allData = data.data.items;
+                    totalItems = data.data.total;
+                    
+                    // If there are more, fetch them too
+                    if (totalItems > 500) {
+                        return fetch(`${API_BASE}/discogs/wantlist?limit=500&offset=500`)
+                            .then(r => r.json())
+                            .then(d => {
+                                if (d.status === 'success') {
+                                    allData = allData.concat(d.data.items);
+                                }
+                                return allData;
+                            });
+                    }
+                    return allData;
+                } else {
+                    throw new Error(data.message);
+                }
+            })
+            .then(() => {
+                renderStats();
+                currentData = allData.slice(0, ITEMS_PER_PAGE);
+                renderTable(currentData);
+                renderPagination();
+                searchStatus.textContent = `Showing 1-${currentData.length} of ${allData.length} records`;
+            })
+            .catch(error => {
+                searchStatus.textContent = "❌ Error loading data: " + error;
+                console.error('Error:', error);
+            });
+    }
+    
+    function renderStats() {
+        const availableCount = allData.filter(item => item.available).length;
+        const totalValue = allData.reduce((sum, item) => {
+            return sum + (item.lowest_price ? parseFloat(item.lowest_price) : 0);
+        }, 0);
+        
+        statsBar.innerHTML = `
+            <div class="stat-item"><span>${allData.length}</span> items</div>
+            <div class="stat-item"><span>${availableCount}</span> available</div>
+            <div class="stat-item">Total: <span>$${totalValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
+        `;
+    }
+    
+    function searchWantlist(query) {
+        searchStatus.textContent = "🔍 Searching...";
+        
+        const filter = query.toUpperCase();
+        const filtered = allData.filter(item => {
+            return (item.artist && item.artist.toUpperCase().includes(filter)) ||
+                   (item.album_title && item.album_title.toUpperCase().includes(filter)) ||
+                   (item.label && item.label.toUpperCase().includes(filter));
+        });
+        
+        currentData = filtered;
+        renderTable(filtered);
+        pagination.innerHTML = '';
+        searchStatus.textContent = `Found ${filtered.length} matching records`;
+    }
+    
+    function renderTable(items) {
+        let html = "";
+        
+        for (let item of items) {
+            const price = item.lowest_price 
+                ? `<span class="price">$${parseFloat(item.lowest_price).toFixed(2)}</span>`
+                : `<span class="no-price">N/A</span>`;
+            
+            const available = item.available
+                ? `<span class="available-badge available-yes">${item.num_for_sale} for sale</span>`
+                : `<span class="available-badge available-no">None</span>`;
+            
+            const buyBtn = item.available && item.marketplace_url
+                ? `<a href="${item.marketplace_url}" target="_blank" class="buy-btn">Buy</a>`
+                : '';
+            
+            html += `
+            <tr data-id="${item.id}">
+                <td><img src="${item.thumb_url || ''}" class="thumb-img" onerror="this.style.display='none'" /></td>
+                <td>${item.artist || ''}</td>
+                <td>${item.album_title || ''}</td>
+                <td>${item.label || ''}</td>
+                <td>${item.format || ''}</td>
+                <td>${item.year || ''}</td>
+                <td>${price}</td>
+                <td>${available}</td>
+                <td>${buyBtn}</td>
+            </tr>
+            `;
+        }
+        
+        tbody.innerHTML = html;
+    }
+    
+    function renderPagination() {
+        const totalPages = Math.ceil(allData.length / ITEMS_PER_PAGE);
+        const currentPage = Math.floor(currentOffset / ITEMS_PER_PAGE) + 1;
+        
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+        
+        let html = '';
+        
+        html += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">← Prev</button>`;
+        
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+        }
+        
+        html += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">Next →</button>`;
+        
+        pagination.innerHTML = html;
+    }
+    
+    window.goToPage = function(page) {
+        currentOffset = (page - 1) * ITEMS_PER_PAGE;
+        currentData = allData.slice(currentOffset, currentOffset + ITEMS_PER_PAGE);
+        renderTable(currentData);
+        renderPagination();
+        searchStatus.textContent = `Showing ${currentOffset + 1}-${currentOffset + currentData.length} of ${allData.length} records`;
+        window.scrollTo(0, 0);
+    };
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# Environment files (contains credentials)
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Data files (large exports)
+*.csv
+*.json
+!package.json
+
+# Roon token (contains auth)
+.roon_token
+
+# Backup files
+*.bak
+*.backup
+
+# Test/temp files
+test_*.py
+tmp/
+temp/

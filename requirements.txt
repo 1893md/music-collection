@@ -1,0 +1,20 @@
+# Flask API
+flask>=2.0.0
+
+# Database
+mysql-connector-python>=8.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# HTTP requests (for Discogs API)
+requests>=2.28.0
+
+# Roon API (install separately if needed)
+# Note: May require specific websocket-client version
+# pip install roonapi
+# pip install websocket-client==1.3.3  # If compatibility issues
+roonapi>=0.1.0
+
+# Optional: for development
+# flask-cors>=4.0.0

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listening History</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            padding: 30px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        h2 {
+            font-size: 2.5em;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .back-btn {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+        }
+
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(17, 153, 142, 0.6);
+        }
+
+        /* Add Entry Section */
+        .add-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .add-section h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .add-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: #11998e;
+            outline: none;
+        }
+
+        .search-results {
+            position: absolute;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-result-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s ease;
+        }
+
+        .search-result-item:hover {
+            background: #f0fff4;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-result-item .artist {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .search-result-item .album {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .album-search-wrapper {
+            position: relative;
+        }
+
+        .add-btn {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            font-size: 14px;
+        }
+
+        .add-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+        }
+
+        .add-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* History Table */
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        th {
+            padding: 18px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background-color: #f0fff4;
+        }
+
+        td {
+            padding: 16px 15px;
+            color: #333;
+            font-size: 13px;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        tbody tr:nth-child(even):hover {
+            background-color: #e8f8ee;
+        }
+
+        .source-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .source-roon {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .source-discogs {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .source-both {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .status-message {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h2 {
+                font-size: 1.8em;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .add-form {
+                grid-template-columns: 1fr;
+            }
+
+            th, td {
+                padding: 12px 8px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>   
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2><span class="icon">🎧</span> Listening History</h2>
+            <a href="../index.html" class="back-btn">← Back to Home</a>
+        </div>
+
+        <div id="statusMessage" class="status-message"></div>
+
+        <!-- Add Entry Section -->
+        <div class="add-section">
+            <h3>➕ Add Listening Entry</h3>
+            <div class="add-form">
+                <div class="form-group album-search-wrapper">
+                    <label>Search Album</label>
+                    <input type="text" id="albumSearch" placeholder="Type to search..." autocomplete="off" />
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+                <div class="form-group">
+                    <label>Artist</label>
+                    <input type="text" id="artistInput" placeholder="Artist name" />
+                </div>
+                <div class="form-group">
+                    <label>Album</label>
+                    <input type="text" id="albumInput" placeholder="Album title" />
+                </div>
+                <div class="form-group">
+                    <label>Source</label>
+                    <select id="sourceInput">
+                        <option value="discogs">Discogs (Physical)</option>
+                        <option value="roon">Roon (Digital)</option>
+                        <option value="both">Both</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date/Time</label>
+                    <input type="datetime-local" id="dateInput" />
+                </div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <input type="text" id="notesInput" placeholder="Any notes..." />
+                </div>
+                <div class="form-group">
+                    <button class="add-btn" id="addBtn" onclick="addEntry()">Add Entry</button>
+                </div>
+            </div>
+            <input type="hidden" id="discogsCollectionId" />
+            <input type="hidden" id="roonAlbumId" />
+        </div>
+
+        <!-- History Table -->
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Artist</th>
+                        <th>Album</th>
+                        <th>Source</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <div class="icon">🎵</div>
+                            <p>Loading listening history...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const API_BASE = '/api';
+    let searchTimeout;
+    
+    // Set default date to now
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('dateInput').value = now.toISOString().slice(0, 16);
+    
+    // Load listening history
+    loadHistory();
+    
+    // Album search
+    const albumSearch = document.getElementById('albumSearch');
+    const searchResults = document.getElementById('searchResults');
+    
+    albumSearch.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            searchResults.classList.remove('active');
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            searchAlbums(query);
+        }, 300);
+    });
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!albumSearch.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.remove('active');
+        }
+    });
+    
+    function searchAlbums(query) {
+        fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}&limit=10`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success' && data.data.items.length > 0) {
+                    renderSearchResults(data.data.items);
+                } else {
+                    searchResults.innerHTML = '<div class="search-result-item">No results found</div>';
+                    searchResults.classList.add('active');
+                }
+            })
+            .catch(error => {
+                console.error('Search error:', error);
+            });
+    }
+    
+    function renderSearchResults(items) {
+        let html = '';
+        
+        for (let item of items) {
+            const source = item.source || 'unknown';
+            const artist = (item.artist || 'Unknown').replace(/'/g, "\\'");
+            const album = (item.album_title || 'Unknown').replace(/'/g, "\\'");
+            html += `
+                <div class="search-result-item" onclick="selectAlbum('${artist}', '${album}', '${source}', ${item.id || 'null'})">
+                    <div class="artist">${item.artist || 'Unknown'}</div>
+                    <div class="album">${item.album_title || 'Unknown'} <span style="color: #999;">(${source})</span></div>
+                </div>
+            `;
+        }
+        
+        searchResults.innerHTML = html;
+        searchResults.classList.add('active');
+    }
+    
+    window.selectAlbum = function(artist, album, source, id) {
+        document.getElementById('artistInput').value = artist;
+        document.getElementById('albumInput').value = album;
+        document.getElementById('sourceInput').value = source;
+        document.getElementById('albumSearch').value = '';
+        searchResults.classList.remove('active');
+        
+        // Store the ID for linking
+        if (source === 'discogs') {
+            document.getElementById('discogsCollectionId').value = id || '';
+            document.getElementById('roonAlbumId').value = '';
+        } else if (source === 'roon') {
+            document.getElementById('roonAlbumId').value = id || '';
+            document.getElementById('discogsCollectionId').value = '';
+        }
+    };
+    
+    window.addEntry = function() {
+        const artist = document.getElementById('artistInput').value.trim();
+        const album = document.getElementById('albumInput').value.trim();
+        const source = document.getElementById('sourceInput').value;
+        const dateValue = document.getElementById('dateInput').value;
+        const notes = document.getElementById('notesInput').value.trim();
+        const discogsId = document.getElementById('discogsCollectionId').value;
+        const roonId = document.getElementById('roonAlbumId').value;
+        
+        if (!artist || !album) {
+            showStatus('Please enter artist and album', 'error');
+            return;
+        }
+        
+        const payload = {
+            artist: artist,
+            album: album,
+            source: source,
+            listened_at: dateValue ? dateValue.replace('T', ' ') + ':00' : null,
+            notes: notes || null
+        };
+        
+        if (discogsId) payload.discogs_collection_id = parseInt(discogsId);
+        if (roonId) payload.roon_album_id = parseInt(roonId);
+        
+        document.getElementById('addBtn').disabled = true;
+        
+        fetch(`${API_BASE}/listening_history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showStatus('✓ Entry added successfully!', 'success');
+                clearForm();
+                loadHistory();
+            } else {
+                showStatus('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showStatus('Error: ' + error, 'error');
+        })
+        .finally(() => {
+            document.getElementById('addBtn').disabled = false;
+        });
+    };
+    
+    function loadHistory() {
+        fetch(`${API_BASE}/listening_history?limit=100`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    renderHistory(data.data);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading history:', error);
+            });
+    }
+    
+    function renderHistory(items) {
+        const tbody = document.getElementById('historyBody');
+        
+        if (!items || items.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        <div class="icon">🎵</div>
+                        <p>No listening history yet. Add your first entry above!</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        let html = '';
+        
+        for (let item of items) {
+            const sourceClass = `source-${item.source}`;
+            const date = item.listened_at ? formatDate(item.listened_at) : 'Unknown';
+            
+            html += `
+                <tr>
+                    <td>${date}</td>
+                    <td>${item.artist || ''}</td>
+                    <td>${item.album || ''}</td>
+                    <td><span class="source-badge ${sourceClass}">${item.source}</span></td>
+                    <td>${item.notes || ''}</td>
+                </tr>
+            `;
+        }
+        
+        tbody.innerHTML = html;
+    }
+    
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    
+    function clearForm() {
+        document.getElementById('artistInput').value = '';
+        document.getElementById('albumInput').value = '';
+        document.getElementById('notesInput').value = '';
+        document.getElementById('discogsCollectionId').value = '';
+        document.getElementById('roonAlbumId').value = '';
+        
+        // Reset date to now
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('dateInput').value = now.toISOString().slice(0, 16);
+    }
+    
+    function showStatus(message, type) {
+        const statusEl = document.getElementById('statusMessage');
+        statusEl.textContent = message;
+        statusEl.className = 'status-message ' + type;
+        
+        setTimeout(() => {
+            statusEl.className = 'status-message';
+        }, 5000);
+    }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Collection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            color: white;
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.7);
+            font-size: 1.2em;
+            margin-bottom: 50px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-decoration: none;
+            color: #333;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .card-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .card-desc {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+
+        .card-count {
+            margin-top: 15px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        /* Card themes */
+        .card.collection { border-top: 4px solid #f093fb; }
+        .card.collection .card-count { background: #fce4ec; color: #c2185b; }
+
+        .card.wantlist { border-top: 4px solid #667eea; }
+        .card.wantlist .card-count { background: #e8eaf6; color: #3949ab; }
+
+        .card.bootlegs { border-top: 4px solid #2193b0; }
+        .card.bootlegs .card-count { background: #e0f7fa; color: #00838f; }
+
+        .card.listening { border-top: 4px solid #11998e; }
+        .card.listening .card-count { background: #e0f2f1; color: #00796b; }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Music Collection</h1>
+        <p class="subtitle">Your unified music universe</p>
+
+        <div class="cards">
+            <a href="htmls/collection.html" class="card collection">
+                <div class="card-icon">📀</div>
+                <div class="card-title">Collection</div>
+                <div class="card-desc">Browse your Discogs vinyl & CD collection with marketplace values</div>
+                <div class="card-count" id="collectionCount">Loading...</div>
+            </a>
+
+            <a href="htmls/wants.html" class="card wantlist">
+                <div class="card-icon">💿</div>
+                <div class="card-title">Wantlist</div>
+                <div class="card-desc">Track albums you want with prices and availability</div>
+                <div class="card-count" id="wantlistCount">Loading...</div>
+            </a>
+
+            <a href="htmls/bootlegs.html" class="card bootlegs">
+                <div class="card-icon">🎸</div>
+                <div class="card-title">Bootlegs</div>
+                <div class="card-desc">Live show recordings - Grateful Dead, Hot Tuna, Dylan & more</div>
+                <div class="card-count" id="bootlegsCount">Loading...</div>
+            </a>
+
+            <a href="htmls/listening_history.html" class="card listening">
+                <div class="card-icon">🎧</div>
+                <div class="card-title">Listening History</div>
+                <div class="card-desc">Log and track what you've been listening to</div>
+                <div class="card-count" id="listeningCount">Loading...</div>
+            </a>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch stats from API
+    fetch('/api/stats/overview')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.getElementById('wantlistCount').textContent = 
+                    `${data.data.discogs_wantlist.toLocaleString()} items • $${data.data.wantlist_total_value.toLocaleString()} value`;
+                document.getElementById('listeningCount').textContent = 
+                    `${data.data.listening_entries.toLocaleString()} entries`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading stats:', error);
+        });
+
+    // Fetch unified collection count (with dupes filtered)
+    fetch('/api/unified/collection?limit=1')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.getElementById('collectionCount').textContent = 
+                    `${data.data.counts.total.toLocaleString()} albums`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading collection count:', error);
+        });
+
+    // Fetch bootleg count separately
+    fetch('/api/roon/bootlegs?limit=1')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.getElementById('bootlegsCount').textContent = 
+                    `${data.data.total.toLocaleString()} shows`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading bootleg count:', error);
+        });
+});
+</script>
+</body>
+</html>
