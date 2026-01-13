@@ -243,3 +243,37 @@ SELECT
 FROM roon_play_history
 GROUP BY album_artist, album
 ORDER BY play_count DESC;
+
+-- =============================================================
+-- TRACK INDEX TABLE (for track browsing/cleanup)
+-- =============================================================
+
+CREATE TABLE IF NOT EXISTS track_index (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    track_title VARCHAR(500),
+    album VARCHAR(500),
+    artist VARCHAR(300),
+    source ENUM('roon', 'discogs'),
+    INDEX idx_track_title (track_title),
+    INDEX idx_artist (artist),
+    INDEX idx_album (album)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================
+-- SYNC HISTORY TABLE (track collection growth over time)
+-- =============================================================
+
+CREATE TABLE IF NOT EXISTS sync_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sync_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    roon_albums INT DEFAULT 0,
+    roon_tracks INT DEFAULT 0,
+    roon_play_history INT DEFAULT 0,
+    discogs_collection INT DEFAULT 0,
+    discogs_tracks INT DEFAULT 0,
+    discogs_wantlist INT DEFAULT 0,
+    track_index_total INT DEFAULT 0,
+    track_index_distinct INT DEFAULT 0,
+    listening_history INT DEFAULT 0,
+    INDEX idx_sync_date (sync_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

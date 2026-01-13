@@ -167,7 +167,10 @@ def sync_roon_albums(db, force=False):
         
         # Insert into database
         print(f"  Inserting {len(all_albums):,} albums into database...")
-        for album in all_albums:
+        for i, album in enumerate(all_albums):
+            if i % 500 == 0:
+                print(f"    Progress: {i}/{len(all_albums)}")
+                db.commit()  # Commit periodically
             artist = album.get('subtitle', 'Unknown')
             title = album.get('title', 'Unknown')
             
@@ -204,7 +207,25 @@ def sync_roon_tags(db, force=False):
         global _roon_connection
         already_connected = _roon_connection is not None
         
-        roon = get_roon_connection()
+        # Try to get connection, with retry on failure
+        max_retries = 2
+        roon = None
+        for attempt in range(max_retries):
+            try:
+                roon = get_roon_connection()
+                # Test connection is still alive
+                roon.browse_browse({"hierarchy": "browse", "pop_all": True})
+                break
+            except Exception as conn_err:
+                print(f"  ⚠ Connection attempt {attempt + 1} failed: {conn_err}")
+                # Reset connection and retry
+                close_roon_connection()
+                if attempt < max_retries - 1:
+                    print("  Retrying connection...")
+                    time.sleep(2)
+                else:
+                    raise Exception(f"Could not connect to Roon after {max_retries} attempts")
+        
         if not already_connected:
             print(f"✓ Connected to Roon: {roon.core_name}")
             time.sleep(2)
@@ -222,6 +243,7 @@ def sync_roon_tags(db, force=False):
         library_key = next((i.get('item_key') for i in root_items if i.get('title') == 'Library'), None)
         if not library_key:
             print("  ✗ Could not find Library menu")
+            db.update_sync_status('roon_tags', 0, 'failed: Library not found')
             return 0
         
         roon.browse_browse({"hierarchy": "browse", "item_key": library_key})
@@ -233,6 +255,7 @@ def sync_roon_tags(db, force=False):
         tags_key = next((i.get('item_key') for i in library_items if i.get('title') == 'Tags'), None)
         if not tags_key:
             print("  ✗ Could not find Tags menu")
+            db.update_sync_status('roon_tags', 0, 'failed: Tags not found')
             return 0
         
         roon.browse_browse({"hierarchy": "browse", "item_key": tags_key})
@@ -251,6 +274,7 @@ def sync_roon_tags(db, force=False):
         
         if not target_tags:
             print("  ✗ Could not find myCDs or mYLps tags")
+            db.update_sync_status('roon_tags', 0, 'failed: No target tags')
             return 0
         
         print(f"  Found target tags: {list(target_tags.keys())}")
@@ -292,8 +316,15 @@ def sync_roon_tags(db, force=False):
         
         print(f"  Total tagged albums: {len(tagged_albums)}")
         
-        # Ensure columns exist
-        try:
+        # Ensure columns exist (check first to avoid error)
+        db.execute("""
+            SELECT COUNT(*) as cnt FROM information_schema.columns 
+            WHERE table_schema = DATABASE() 
+            AND table_name = 'roon_albums' 
+            AND column_name = 'is_physical_dupe'
+        """)
+        result = db.fetch_one()
+        if result['cnt'] == 0:
             db.execute("""
                 ALTER TABLE roon_albums 
                 ADD COLUMN is_physical_dupe BOOLEAN DEFAULT FALSE,
@@ -301,8 +332,6 @@ def sync_roon_tags(db, force=False):
             """)
             db.commit()
             print("  ✓ Added is_physical_dupe columns")
-        except:
-            pass  # Columns already exist
         
         # Reset all flags
         db.execute("UPDATE roon_albums SET is_physical_dupe = FALSE, physical_tag = NULL")
@@ -332,12 +361,14 @@ def sync_roon_tags(db, force=False):
         for row in db.fetch_all():
             print(f"    {row['physical_tag']}: {row['cnt']} albums")
         
+        db.update_sync_status('roon_tags', matched, 'success')
         return matched
         
     except Exception as e:
         print(f"✗ Roon tags sync failed: {e}")
         import traceback
         traceback.print_exc()
+        db.update_sync_status('roon_tags', 0, f'failed: {str(e)[:50]}')
         return 0
 
 
@@ -426,9 +457,17 @@ def sync_discogs_collection(db, force=False):
         # Insert into database
         print(f"  Inserting {len(all_items):,} items into database...")
         track_count = 0
+        duplicates = []
         
-        for item in all_items:
-            collection_id = db.insert_discogs_collection(item)
+        for i, item in enumerate(all_items):
+            if i % 50 == 0:
+                print(f"    Progress: {i}/{len(all_items)}")
+                db.commit()  # Commit periodically so progress is visible in DB
+            
+            collection_id, was_duplicate, artist, album_title, release_id = db.insert_discogs_collection(item)
+            
+            if was_duplicate:
+                duplicates.append((artist, album_title, release_id))
             
             # Get full release details for tracklist
             release_id = item['id']
@@ -451,6 +490,62 @@ def sync_discogs_collection(db, force=False):
             time.sleep(2)  # Rate limiting
         
         db.commit()
+        
+        # Report duplicates
+        if duplicates:
+            print(f"\n  ⚠ Found {len(duplicates)} duplicate(s) - please check library:")
+            for artist, album, rid in duplicates:
+                print(f"    - {artist} - {album} (release_id: {rid})")
+        
+        # Sync Last_Listened field (field_id 5) to listening_history
+        print("  Syncing Last_Listened data to listening_history...")
+        listened_count = 0
+        from datetime import datetime
+        
+        for item in all_items:
+            notes = item.get('notes', [])
+            last_listened = None
+            
+            # Find field_id 5 (Last_Listened)
+            for note in notes:
+                if note.get('field_id') == 5 and note.get('value'):
+                    last_listened = note['value']
+                    break
+            
+            if last_listened:
+                basic = item.get('basic_information', {})
+                artist = basic['artists'][0]['name'] if basic.get('artists') else 'Unknown'
+                album_title = basic.get('title', 'Unknown')
+                release_id = item.get('id')
+                
+                # Parse date (format: "Dec 17, 2025")
+                try:
+                    dt = datetime.strptime(last_listened, "%b %d, %Y")
+                    
+                    # Update discogs_collection.last_listened
+                    db.execute("""
+                        UPDATE discogs_collection SET last_listened = %s WHERE release_id = %s
+                    """, (dt, release_id))
+                    
+                    # Check if already in listening_history
+                    db.execute("""
+                        SELECT id FROM listening_history 
+                        WHERE album = %s AND source = 'discogs' AND DATE(listened_at) = DATE(%s)
+                    """, (album_title, dt))
+                    
+                    if not db.fetch_one():
+                        db.execute("""
+                            INSERT INTO listening_history (artist, album, source, listened_at, notes)
+                            VALUES (%s, %s, 'discogs', %s, 'Imported from Discogs Last_Listened field')
+                        """, (artist, album_title, dt))
+                    
+                    listened_count += 1
+                except Exception as e:
+                    print(f"    Could not parse date '{last_listened}': {e}")
+        
+        db.commit()
+        if listened_count > 0:
+            print(f"  ✓ Synced {listened_count} Last_Listened records")
         
         # Update keep_track
         db.update_sync_status('discogs_collection', len(all_items), 'success')
@@ -541,7 +636,10 @@ def sync_discogs_wantlist(db, force=False):
         
         # Insert into database
         print(f"  Inserting {len(all_items):,} wantlist items...")
-        for item in all_items:
+        for i, item in enumerate(all_items):
+            if i % 50 == 0:
+                print(f"    Progress: {i}/{len(all_items)}")
+                db.commit()  # Commit periodically
             db.insert_discogs_wantlist(item)
         
         db.commit()
@@ -675,6 +773,77 @@ def sync_roon_play_history(db, force=False):
     return record_count
 
 # =============================================================
+# TRACK INDEX SYNC
+# =============================================================
+
+def sync_tracks_index(db, force=False):
+    """
+    Build track_index table from roon_tracks and discogs_tracks.
+    This creates a denormalized view for fast track browsing.
+    """
+    print("\n--- Syncing Track Index ---")
+    
+    try:
+        # Create table if not exists
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS track_index (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                track_title VARCHAR(500),
+                album VARCHAR(500),
+                artist VARCHAR(300),
+                source ENUM('roon', 'discogs'),
+                INDEX idx_track_title (track_title),
+                INDEX idx_artist (artist),
+                INDEX idx_album (album)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Truncate and rebuild
+        print("  Truncating track_index...")
+        db.execute("TRUNCATE TABLE track_index")
+        
+        # Insert from roon_tracks
+        print("  Inserting Roon tracks...")
+        db.execute("""
+            INSERT INTO track_index (track_title, album, artist, source)
+            SELECT track_title, album, album_artist, 'roon'
+            FROM roon_tracks
+            WHERE track_title IS NOT NULL AND track_title != ''
+        """)
+        roon_count = db.cursor.rowcount
+        db.commit()
+        print(f"    ✓ {roon_count:,} Roon tracks")
+        
+        # Insert from discogs_tracks
+        print("  Inserting Discogs tracks...")
+        db.execute("""
+            INSERT INTO track_index (track_title, album, artist, source)
+            SELECT dt.track_title, dc.album_title, dc.artist, 'discogs'
+            FROM discogs_tracks dt
+            JOIN discogs_collection dc ON dt.collection_id = dc.id
+            WHERE dt.track_title IS NOT NULL AND dt.track_title != ''
+        """)
+        discogs_count = db.cursor.rowcount
+        db.commit()
+        print(f"    ✓ {discogs_count:,} Discogs tracks")
+        
+        total = roon_count + discogs_count
+        
+        # Get distinct count
+        db.execute("SELECT COUNT(DISTINCT track_title) as cnt FROM track_index")
+        distinct_count = db.fetch_one()['cnt']
+        
+        print(f"  ✓ Track index built: {total:,} total, {distinct_count:,} distinct titles")
+        
+        db.update_sync_status('track_index', total, 'success')
+        return total
+        
+    except Exception as e:
+        print(f"  ✗ Track index sync failed: {e}")
+        db.update_sync_status('track_index', 0, f'failed: {str(e)[:50]}')
+        return 0
+
+# =============================================================
 # MAIN SYNC FUNCTION
 # =============================================================
 
@@ -685,7 +854,7 @@ def sync_all(sources=None, force=False):
     Args:
         sources: List of source names to sync, or None for all
                  Options: 'roon_albums', 'roon_tags', 'roon_tracks', 'roon_play_history',
-                         'discogs_collection', 'discogs_wantlist'
+                         'discogs_collection', 'discogs_wantlist', 'tracks'
         force: If True, ignore skip logic and sync anyway
     """
     print("\n" + "="*60)
@@ -722,6 +891,10 @@ def sync_all(sources=None, force=False):
         if sources is None or 'roon_play_history' in sources:
             results['roon_play_history'] = sync_roon_play_history(db, force)
         
+        # Track Index (depends on roon_tracks and discogs_tracks)
+        if sources is None or 'tracks' in sources:
+            results['track_index'] = sync_tracks_index(db, force)
+        
         # Print summary
         print("\n" + "="*60)
         print("SYNC COMPLETE")
@@ -736,6 +909,72 @@ def sync_all(sources=None, force=False):
         db.execute("SELECT source_name, last_sync, records_count, sync_status FROM keep_track ORDER BY source_name")
         for row in db.fetch_all():
             print(f"  {row['source_name']}: {row['records_count'] or 0:,} records @ {row['last_sync']} ({row['sync_status']})")
+        
+        # Save to sync_history (only on full sync)
+        if sources is None:
+            try:
+                # Create table if not exists
+                db.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_history (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        sync_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        roon_albums INT DEFAULT 0,
+                        roon_tracks INT DEFAULT 0,
+                        roon_play_history INT DEFAULT 0,
+                        discogs_collection INT DEFAULT 0,
+                        discogs_tracks INT DEFAULT 0,
+                        discogs_wantlist INT DEFAULT 0,
+                        track_index_total INT DEFAULT 0,
+                        track_index_distinct INT DEFAULT 0,
+                        listening_history INT DEFAULT 0,
+                        INDEX idx_sync_date (sync_date)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+                
+                # Get current counts
+                db.execute("SELECT COUNT(*) as cnt FROM roon_albums")
+                roon_albums = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM roon_tracks")
+                roon_tracks = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM roon_play_history")
+                roon_play_history = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM discogs_collection")
+                discogs_collection = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM discogs_tracks")
+                discogs_tracks = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM discogs_wantlist")
+                discogs_wantlist = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM track_index")
+                track_index_total = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(DISTINCT track_title) as cnt FROM track_index")
+                track_index_distinct = db.fetch_one()['cnt']
+                
+                db.execute("SELECT COUNT(*) as cnt FROM listening_history")
+                listening_history = db.fetch_one()['cnt']
+                
+                # Insert into sync_history
+                db.execute("""
+                    INSERT INTO sync_history 
+                    (roon_albums, roon_tracks, roon_play_history, discogs_collection, 
+                     discogs_tracks, discogs_wantlist, track_index_total, 
+                     track_index_distinct, listening_history)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (roon_albums, roon_tracks, roon_play_history, discogs_collection,
+                      discogs_tracks, discogs_wantlist, track_index_total,
+                      track_index_distinct, listening_history))
+                db.commit()
+                
+                print(f"\n✓ Saved to sync_history")
+                
+            except Exception as hist_err:
+                print(f"\n⚠ Could not save to sync_history: {hist_err}")
         
     except Exception as e:
         print(f"\n✗ Sync failed with error: {e}")
@@ -756,7 +995,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Sync Music Collection Data')
     parser.add_argument('--source', '-s', 
                         choices=['roon_albums', 'roon_tags', 'roon_tracks', 'roon_play_history',
-                                'discogs_collection', 'discogs_wantlist'],
+                                'discogs_collection', 'discogs_wantlist', 'tracks'],
                         help='Sync specific source only')
     parser.add_argument('--all', '-a', action='store_true',
                         help='Sync all sources (default)')
