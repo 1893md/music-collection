@@ -104,16 +104,17 @@ class MusicDB:
     def update_sync_status(self, source_name, records_count, status='success'):
         """Update keep_track after sync"""
         self.execute("""
-            UPDATE keep_track 
-            SET last_sync = NOW(), 
-                records_count = %s, 
-                sync_status = %s,
+            INSERT INTO keep_track (source_name, last_sync, records_count, sync_status, updated_at)
+            VALUES (%s, NOW(), %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                last_sync = NOW(),
+                records_count = VALUES(records_count),
+                sync_status = VALUES(sync_status),
                 updated_at = NOW()
-            WHERE source_name = %s
-        """, (records_count, status, source_name))
+        """, (source_name, records_count, status))
         self.commit()
         print(f"  ✓ Updated keep_track: {source_name} = {records_count} records ({status})")
-    
+        
     # =========================================================
     # TABLE MANAGEMENT
     # =========================================================
@@ -159,6 +160,18 @@ class MusicDB:
         artist_norm = MusicDB.normalize_string(artist)
         album_norm = MusicDB.normalize_string(album)
         return f"{artist_norm} - {album_norm}"
+    
+    @staticmethod
+    def parse_iso_date(date_str):
+        """Parse ISO date string to MySQL datetime format"""
+        if not date_str:
+            return None
+        try:
+            # Handle '2023-01-15T21:36:45-08:00' format
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            return None
     
     # =========================================================
     # ROON METHODS
@@ -234,7 +247,9 @@ class MusicDB:
     # =========================================================
     
     def insert_discogs_collection(self, item):
-        """Insert or update a Discogs collection item"""
+        """Insert or update a Discogs collection item
+        Returns: tuple (collection_id, was_duplicate)
+        """
         basic = item.get('basic_information', {})
         artist = basic['artists'][0]['name'] if basic.get('artists') else 'Unknown'
         album_title = basic.get('title', 'Unknown')
@@ -277,7 +292,7 @@ class MusicDB:
             basic['labels'][0]['name'][:300] if basic.get('labels') else None,
             basic['formats'][0]['name'][:100] if basic.get('formats') else None,
             basic.get('year'),
-            item.get('date_added'),
+            self.parse_iso_date(item.get('date_added')),
             item.get('rating'),
             item.get('folder_id'),
             self.normalize_string(artist)[:300],
@@ -291,10 +306,13 @@ class MusicDB:
             sleeve_condition[:100]
         ))
         
+        # Check if this was a duplicate (rowcount=2 means update, rowcount=1 means insert)
+        was_duplicate = self.cursor.rowcount == 2
+        
         # Return the collection ID for track insertion
         self.execute("SELECT id FROM discogs_collection WHERE release_id = %s", (item.get('id'),))
         result = self.fetch_one()
-        return result['id'] if result else None
+        return (result['id'] if result else None, was_duplicate, artist, album_title, item.get('id'))
     
     def insert_discogs_track(self, collection_id, release_id, track):
         """Insert a Discogs track"""
@@ -345,7 +363,7 @@ class MusicDB:
             basic['labels'][0]['name'][:300] if basic.get('labels') else None,
             basic['formats'][0]['name'][:100] if basic.get('formats') else None,
             basic.get('year'),
-            item.get('date_added'),
+            self.parse_iso_date(item.get('date_added')),
             item.get('notes'),
             num_for_sale,
             lowest_price,
