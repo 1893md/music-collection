@@ -753,6 +753,19 @@ def sync_discogs_wantlist(db, force=False):
         
         print(f"  Total items fetched: {len(all_items):,}")
         
+        # Get marketplace values for each item
+        print("  Fetching marketplace values...")
+        for i, item in enumerate(all_items):
+            if i % 50 == 0:
+                print(f"    Progress: {i}/{len(all_items)}")
+            
+            release_id = item['id']
+            stats = fetch_marketplace_stats(release_id)
+            if stats:
+                item['marketplace_stats'] = stats
+            
+            time.sleep(2)  # Rate limiting
+        
         # Truncate and reload
         db.truncate_table('discogs_wantlist')
         
