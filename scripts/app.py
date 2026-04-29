@@ -454,6 +454,30 @@ def add_listening_entry():
         return error_response('Database connection failed', 500)
     
     try:
+        # Auto-determine format if not provided
+        format_value = data.get('format')
+        if not format_value:
+            if source == 'roon':
+                # Roon is always FLAC
+                format_value = 'FLAC'
+            elif source in ('discogs', 'both') and data.get('discogs_collection_id'):
+                # Look up format from discogs_collection
+                db.execute("""
+                    SELECT format FROM discogs_collection WHERE id = %s
+                """, (data.get('discogs_collection_id'),))
+                result = db.fetch_one()
+                if result and result.get('format'):
+                    # Normalize the format to our standard values
+                    raw_format = result['format'].lower()
+                    if 'vinyl' in raw_format or 'lp' in raw_format or '12"' in raw_format or '7"' in raw_format:
+                        format_value = 'Vinyl'
+                    elif 'cd' in raw_format:
+                        format_value = 'CD'
+                    elif 'cass' in raw_format:
+                        format_value = 'Cassette'
+                    else:
+                        format_value = result['format']  # Use raw value if no match
+        
         db.execute("""
             INSERT INTO listening_history 
                 (artist, album, source, listened_at, format, notes, roon_album_id, discogs_collection_id)
@@ -463,7 +487,7 @@ def add_listening_entry():
             album,
             source,
             listened_at,
-            data.get('format'),
+            format_value,
             data.get('notes'),
             data.get('roon_album_id'),
             data.get('discogs_collection_id')
@@ -547,6 +571,34 @@ def update_is_nun(id):
         db.commit()
         db.disconnect()
         return success_response(message='is_nun updated')
+        
+    except Exception as e:
+        db.disconnect()
+        return error_response(str(e), 500)
+
+@app.route('/api/listening_history/<int:id>/format', methods=['PUT'])
+def update_listening_history_format(id):
+    """Update format for a listening history entry"""
+    data = request.get_json()
+    
+    if not data or 'format' not in data:
+        return error_response('format is required')
+    
+    format_value = data.get('format', '')
+    
+    db = get_db()
+    if not db:
+        return error_response('Database connection failed', 500)
+    
+    try:
+        db.execute("""
+            UPDATE listening_history 
+            SET format = %s 
+            WHERE id = %s
+        """, (format_value, id))
+        db.commit()
+        db.disconnect()
+        return success_response(message='Format updated')
         
     except Exception as e:
         db.disconnect()
@@ -758,6 +810,112 @@ def get_roon_tracks():
         db.disconnect()
         return error_response(str(e), 500)
 
+@app.route('/api/tracks', methods=['GET'])
+def get_all_tracks():
+    """Get distinct tracks from track_index table
+    
+    Query params:
+        limit: Max results (default 100, max 1000)
+        offset: Pagination offset (default 0)
+        search: Search term for track title
+    """
+    limit = min(int(request.args.get('limit', 100)), 1000)
+    offset = int(request.args.get('offset', 0))
+    search = request.args.get('search', '').strip()
+    
+    db = get_db()
+    if not db:
+        return error_response('Database connection failed', 500)
+    
+    try:
+        if search:
+            search_pattern = f'%{search}%'
+            
+            # Count distinct tracks matching search
+            db.execute("""
+                SELECT COUNT(DISTINCT track_title) as cnt 
+                FROM track_index 
+                WHERE track_title LIKE %s
+            """, (search_pattern,))
+            total = db.fetch_one()['cnt']
+            
+            # Get distinct tracks with album count
+            db.execute("""
+                SELECT track_title, COUNT(*) as album_count,
+                       GROUP_CONCAT(DISTINCT source ORDER BY source) as sources
+                FROM track_index
+                WHERE track_title LIKE %s
+                GROUP BY track_title
+                ORDER BY track_title
+                LIMIT %s OFFSET %s
+            """, (search_pattern, limit, offset))
+        else:
+            # Count distinct tracks
+            db.execute("SELECT COUNT(DISTINCT track_title) as cnt FROM track_index")
+            total = db.fetch_one()['cnt']
+            
+            # Get distinct tracks with album count
+            db.execute("""
+                SELECT track_title, COUNT(*) as album_count,
+                       GROUP_CONCAT(DISTINCT source ORDER BY source) as sources
+                FROM track_index
+                GROUP BY track_title
+                ORDER BY track_title
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
+        
+        results = db.fetch_all()
+        
+        db.disconnect()
+        return success_response({
+            'tracks': results,
+            'count': len(results),
+            'total': total,
+            'limit': limit,
+            'offset': offset
+        })
+        
+    except Exception as e:
+        db.disconnect()
+        return error_response(str(e), 500)
+
+@app.route('/api/tracks/albums', methods=['GET'])
+def get_track_albums():
+    """Get all albums containing a specific track
+    
+    Query params:
+        track_title: Exact track title (required)
+    """
+    track_title = request.args.get('track_title', '')
+    
+    if not track_title:
+        return error_response('track_title parameter required')
+    
+    db = get_db()
+    if not db:
+        return error_response('Database connection failed', 500)
+    
+    try:
+        db.execute("""
+            SELECT track_title, album, artist, source
+            FROM track_index
+            WHERE track_title = %s
+            ORDER BY artist, album
+        """, (track_title,))
+        
+        results = db.fetch_all()
+        
+        db.disconnect()
+        return success_response({
+            'albums': results,
+            'count': len(results),
+            'track_title': track_title
+        })
+        
+    except Exception as e:
+        db.disconnect()
+        return error_response(str(e), 500)
+
 # =============================================================
 # STATS ENDPOINTS
 # =============================================================
@@ -785,6 +943,9 @@ def get_stats_overview():
         # Discogs stats
         db.execute("SELECT COUNT(*) as cnt FROM discogs_collection")
         stats['discogs_collection'] = db.fetch_one()['cnt']
+        
+        db.execute("SELECT COUNT(*) as cnt FROM discogs_tracks")
+        stats['discogs_tracks'] = db.fetch_one()['cnt']
         
         db.execute("SELECT COUNT(*) as cnt FROM discogs_wantlist")
         stats['discogs_wantlist'] = db.fetch_one()['cnt']

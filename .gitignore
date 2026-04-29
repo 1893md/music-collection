@@ -42,3 +42,10 @@ Thumbs.db
 test_*.py
 tmp/
 temp/
+
+# Rendered output and download bundles
+*.pdf
+*.zip
+
+# Timestamped env backups (e.g., .env.bak-20260429)
+.env.bak-*
